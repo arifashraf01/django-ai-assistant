@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Django AI Assistant</title>
+</head>
+<body>
+
+    <h1>Django AI Assistant</h1>
+
+    <form method="post">
+        {% csrf_token %}
+        <textarea
+            name="message"
+            rows="5"
+            cols="60"
+            placeholder="Ask something..."
+        ></textarea>
+
+        <br><br>
+
+        <button type="submit">
+            Send
+        </button>
+    </form>
+
+    <hr>
+
+<h2>Chat History</h2>
+
+{% for message in messages %}
+    <div style="margin-bottom:20px; border:1px solid #ccc; padding:10px;">
+        <strong>You:</strong>
+        <p>{{ message.user_message }}</p>
+
+        <strong>AI:</strong>
+        <p>{{ message.ai_response }}</p>
+
+        <small>{{ message.created_at }}</small>
+    </div>
+{% endfor %}
+
+    {% if response %}
+        <hr>
+        <h3>AI Response</h3>
+        <p>{{ response }}</p>
+    {% endif %}
+
+</body>
+</html>
