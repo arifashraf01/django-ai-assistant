@@ -1,9 +1,15 @@
 from django.shortcuts import render
 from ollama import chat
 from .models import ChatMessage
+from django.shortcuts import render, redirect
+
 
 
 def chatbot(request):
+    if request.method == "POST" and "clear_chat" in request.POST:
+       ChatMessage.objects.all().delete()
+       return redirect("chatbot")
+
     response_text = ""
 
     if request.method == "POST":
