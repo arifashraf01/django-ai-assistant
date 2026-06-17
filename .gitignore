@@ -5,3 +5,8 @@ db.sqlite3
 .env
 .idea/
 .vscode/
+
+# Local data stores and uploads
+chroma_db/
+media/
+*.sqlite3
