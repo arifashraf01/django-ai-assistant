@@ -3,13 +3,18 @@ from chat.pdf_utils import (
     chunk_text
 )
 
+from chat.embedding_utils import (
+    create_embeddings
+)
+
 pdf_path = "media/documents/arif_resume.pdf"
 
 text = extract_text_from_pdf(pdf_path)
 
 chunks = chunk_text(text)
 
-print(f"Total chunks: {len(chunks)}")
+embeddings = create_embeddings(chunks)
 
-print("\nFIRST CHUNK:\n")
-print(chunks[0])
+print("Chunks:", len(chunks))
+print("Embeddings:", len(embeddings))
+print("Vector Length:", len(embeddings[0]))
