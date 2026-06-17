@@ -1,0 +1,5 @@
+Django==6.0.6
+pypdf==4.0.1
+sentence-transformers==3.0.1
+chromadb==0.4.21
+ollama==0.1.34

@@ -1,0 +1,188 @@
+"""
+RAG (Retrieval-Augmented Generation) utilities for chatbot.
+
+Handles:
+- Query embedding conversion
+- Semantic retrieval from ChromaDB
+- RAG prompt building
+- Ollama integration for grounded answers
+"""
+
+import os
+import chromadb
+from ollama import chat
+from .embedding_utils import model
+
+# Initialize ChromaDB client and collection
+DB_DIR = os.path.join(os.path.dirname(__file__), "..", "chroma_db")
+os.makedirs(DB_DIR, exist_ok=True)
+
+client = chromadb.PersistentClient(path=DB_DIR)
+
+
+def get_or_create_collection(doc_id):
+    """
+    Get or create a ChromaDB collection for a specific document.
+    
+    Each uploaded PDF gets its own collection to maintain separation.
+    """
+    collection_name = f"doc_{doc_id}"
+    return client.get_or_create_collection(
+        name=collection_name,
+        metadata={"hnsw:space": "cosine"}
+    )
+
+
+def store_document_chunks(doc_id, chunks):
+    """
+    Store document chunks with embeddings in ChromaDB.
+    
+    Args:
+        doc_id: Document ID from Django model
+        chunks: List of text chunks to store
+    
+    Returns:
+        Number of chunks stored
+    """
+    if not chunks:
+        return 0
+    
+    collection = get_or_create_collection(doc_id)
+    
+    # Generate embeddings for all chunks
+    embeddings = model.encode(chunks).tolist()
+    
+    # Store in ChromaDB with metadata
+    ids = [f"chunk_{i}" for i in range(len(chunks))]
+    metadatas = [{"doc_id": str(doc_id), "chunk_index": i} for i in range(len(chunks))]
+    
+    collection.add(
+        ids=ids,
+        embeddings=embeddings,
+        metadatas=metadatas,
+        documents=chunks
+    )
+    
+    return len(chunks)
+
+
+def retrieve_relevant_chunks(doc_id, query, top_k=3):
+    """
+    Retrieve top-k most relevant chunks for a query using semantic similarity.
+    
+    Args:
+        doc_id: Document ID to search within
+        query: User's question
+        top_k: Number of chunks to retrieve (default 3)
+    
+    Returns:
+        List of relevant chunk texts
+    """
+    try:
+        collection = get_or_create_collection(doc_id)
+        
+        # Convert query to embedding
+        query_embedding = model.encode([query]).tolist()[0]
+        
+        # Search ChromaDB for similar chunks
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=min(top_k, 5)  # Retrieve up to 5, return top_k
+        )
+        
+        # Extract and return chunk texts
+        if results and results["documents"]:
+            return results["documents"][0]  # Return first (and only) query's results
+        
+        return []
+    
+    except Exception as e:
+        print(f"Error retrieving chunks: {e}")
+        return []
+
+
+def build_rag_prompt(question, chunks):
+    """
+    Build a RAG prompt with retrieved context and user question.
+    
+    Args:
+        question: User's question
+        chunks: Retrieved context chunks
+    
+    Returns:
+        Formatted prompt for the LLM
+    """
+    context = "\n\n".join(chunks)
+    
+    prompt = f"""Based on the provided context, answer the user's question.
+
+CONTEXT:
+{context}
+
+QUESTION:
+{question}
+
+INSTRUCTIONS:
+- Answer only based on the provided context
+- Be concise and direct
+- If the answer is not in the context, say: "This information was not found in the uploaded document."
+- Do not make up or use external knowledge"""
+    
+    return prompt
+
+
+def get_rag_response(doc_id, user_question):
+    """
+    Get a grounded answer from Ollama using RAG.
+    
+    Flow:
+    1. Retrieve relevant chunks from ChromaDB
+    2. Build RAG prompt
+    3. Send to Ollama Gemma3:4b
+    4. Return grounded answer
+    
+    Args:
+        doc_id: Document ID to retrieve context from
+        user_question: User's question
+    
+    Returns:
+        Response from Ollama
+    """
+    # Step 1: Retrieve relevant chunks
+    chunks = retrieve_relevant_chunks(doc_id, user_question, top_k=3)
+    
+    if not chunks:
+        return "No relevant information found in the uploaded document. Please check your PDF content."
+    
+    # Step 2: Build RAG prompt
+    rag_prompt = build_rag_prompt(user_question, chunks)
+    
+    # Step 3 & 4: Send to Ollama and return response
+    try:
+        response = chat(
+            model="gemma3:4b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": rag_prompt
+                }
+            ]
+        )
+        return response["message"]["content"]
+    
+    except Exception as e:
+        return f"Error generating response: {str(e)}"
+
+
+def delete_document_collection(doc_id):
+    """
+    Delete ChromaDB collection when document is removed.
+    
+    Args:
+        doc_id: Document ID to delete
+    """
+    try:
+        collection_name = f"doc_{doc_id}"
+        client.delete_collection(name=collection_name)
+    except Exception as e:
+        print(f"Error deleting collection: {e}")
