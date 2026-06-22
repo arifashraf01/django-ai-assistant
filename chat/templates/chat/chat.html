@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+{% load tz %}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,7 +20,8 @@
         }
 
         .container {
-            max-width: 1000px;
+            max-width: none;
+            width: 100%;
             margin: 0 auto;
             height: 100vh;
             display: flex;
@@ -56,7 +58,7 @@
 
         /* ===== LEFT SIDEBAR (DOCUMENTS & UPLOAD) ===== */
         .sidebar {
-            width: 280px;
+            width: 320px;
             display: flex;
             flex-direction: column;
             gap: 20px;
@@ -80,11 +82,12 @@
             letter-spacing: 0.5px;
         }
 
-        /* Active Document Display */
+        /* Active Document Display (light mode default) */
         .active-document {
             padding: 12px;
-            background-color: #f0f0f0;
-            border: 1px solid #d0d0d0;
+            background-color: #f0f0f0; /* original light-mode background */
+            border: 1px solid #d0d0d0; /* original light-mode border */
+            color: #000000;
             font-size: 12px;
         }
 
@@ -132,8 +135,9 @@
             width: 100%;
             font-size: 12px;
             padding: 8px;
-            border: 1px solid #d0d0d0;
-            background-color: #ffffff;
+            border: 1px solid var(--border, #04121b);
+            background-color: #000000;
+            color: #ffffff;
             margin-bottom: 10px;
         }
 
@@ -194,6 +198,197 @@
             margin-bottom: 15px;
             display: flex;
             flex-direction: column;
+        }
+        /* Splitter styles */
+        .splitter {
+            width: 8px;
+            background: linear-gradient(180deg, rgba(0,0,0,0.06), rgba(0,0,0,0.02));
+            cursor: col-resize;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            user-select: none;
+            transition: background 0.12s;
+        }
+
+        .splitter:hover {
+            background: rgba(0,0,0,0.08);
+        }
+
+        /* Dark-mode splitter contrast */
+        body.dark .splitter {
+            background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+        }
+        /* Enforce no-white backgrounds in dark mode (override later base styles) */
+        body.dark .message.user {
+            background-color: var(--box-blue) !important;
+            color: var(--text) !important;
+        }
+
+        body.dark .message.assistant {
+            background-color: var(--box-blue-2) !important;
+            color: var(--text) !important;
+            border-left-color: var(--box-blue-2) !important;
+        }
+
+        body.dark .system-message {
+            background-color: #020304 !important;
+            border-left-color: var(--box-blue) !important;
+            color: var(--text) !important;
+        }
+        /* Dark mode overrides — strict no-white palette (black + blue tones) */
+        :root {
+            --bg: #000000;
+            --panel: #030507; /* near-black for panels */
+            --box-blue: #05203a; /* darker blue for assistant/user boxes */
+            --box-blue-2: #08305a; /* slightly lighter blue */
+            --muted: #9aa0a6; /* grey for labels/timestamps */
+            --border: #04121b;
+            --text: #ffffff;
+        }
+
+        body.dark, .dark {
+            background-color: var(--bg);
+            color: var(--text);
+        }
+
+        /* Force all textual content white in dark mode to satisfy request */
+        body.dark * {
+            color: var(--text) !important;
+        }
+
+        body.dark .header,
+        .dark .header {
+            background-color: var(--bg);
+            border-bottom-color: var(--border);
+        }
+
+        body.dark .sidebar,
+        .dark .sidebar {
+            background-color: var(--panel);
+            border-right-color: var(--border);
+        }
+
+        body.dark .sidebar-section,
+        .dark .sidebar-section {
+            background-color: #04060a;
+            border-color: var(--border);
+            color: var(--muted);
+        }
+
+        body.dark .chat-section,
+        .dark .chat-section {
+            background-color: var(--bg);
+        }
+
+        body.dark .chat-area {
+            background-color: var(--bg);
+            border-color: var(--border);
+        }
+
+        /* Message boxes use blue tones (no white anywhere) */
+        body.dark .message.user {
+            background-color: var(--box-blue);
+            color: var(--text);
+            margin-left: 40px;
+        }
+
+        body.dark .message.assistant {
+            background-color: var(--box-blue-2);
+            color: var(--text);
+            margin-right: 40px;
+            border-left-color: var(--box-blue-2);
+            padding-left: 19px;
+        }
+
+        .message-label {
+            color: var(--muted);
+        }
+
+        .message-content {
+            color: var(--text);
+        }
+
+        .message-timestamp {
+            color: var(--muted);
+        }
+
+        body.dark .input-section,
+        .dark .input-section {
+            background-color: var(--panel);
+            border-color: var(--border);
+        }
+
+        body.dark .input-section textarea {
+            background-color: #020304;
+            color: var(--text);
+        }
+
+        body.dark .input-controls {
+            background-color: var(--panel);
+            border-top-color: var(--border);
+        }
+
+        body.dark .input-controls button {
+            background-color: var(--box-blue-2);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        body.dark .input-controls button[name="clear_chat"] {
+            background-color: var(--box-blue);
+        }
+
+        .theme-toggle {
+            float: right;
+            margin-top: -36px;
+        }
+
+        .theme-toggle button {
+            padding: 6px 10px;
+            font-size: 12px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        /* Recent items in the sidebar (small blue boxes) */
+        .sidebar .recent-item,
+        .sidebar .recent-queries,
+        .sidebar a.recent-item {
+            display: block;
+            background: var(--box-blue);
+            color: var(--text);
+            padding: 10px 12px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border);
+            text-decoration: none;
+        }
+
+        /* In dark mode, make active-document a blue box */
+        body.dark .active-document {
+            background-color: var(--box-blue-2) !important;
+            border-color: var(--border) !important;
+            color: var(--text) !important;
+        }
+
+        /* Make the chat area take the remaining width and fit full height */
+        .main-content {
+            width: 100%;
+            display: flex;
+            align-items: stretch;
+        }
+
+        .chat-section {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .chat-area {
+            flex: 1 1 auto;
+            min-height: 0;
         }
 
         .chat-empty-state {
@@ -381,6 +576,9 @@
         <div class="header">
             <h1>AI Assistant</h1>
             <p>RAG-powered document Q&amp;A</p>
+            <div class="theme-toggle">
+                <button id="darkToggle" type="button" aria-pressed="false">Dark</button>
+            </div>
         </div>
 
         <!-- MAIN CONTENT -->
@@ -426,22 +624,25 @@
                 </div>
             </div>
 
+            <!-- Splitter (draggable) -->
+            <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"></div>
+
             <!-- CHAT SECTION -->
             <div class="chat-section">
                 <!-- Chat Area -->
                 <div class="chat-area" id="chatArea">
                     {% if active_document %}
                         {% if messages %}
-                            {% for message in messages %}
+                                {% for message in messages reversed %}
                             <div class="message user">
                                 <div class="message-label">You</div>
                                 <div class="message-content">{{ message.user_message }}</div>
-                                <div class="message-timestamp">{{ message.created_at|date:"H:i" }}</div>
+                                <div class="message-timestamp">{{ message.created_at|localtime|date:"H:i" }}</div>
                             </div>
                             <div class="message assistant">
                                 <div class="message-label">Assistant</div>
                                 <div class="message-content">{{ message.ai_response }}</div>
-                                <div class="message-timestamp">{{ message.created_at|date:"H:i" }}</div>
+                                <div class="message-timestamp">{{ message.created_at|localtime|date:"H:i" }}</div>
                             </div>
                             {% endfor %}
                         {% else %}
@@ -504,6 +705,102 @@
                 }
             });
         }
+
+        // Dark mode toggle: persist preference in localStorage
+        (function(){
+            const toggle = document.getElementById('darkToggle');
+            if (!toggle) return;
+
+            const apply = (isDark) => {
+                if (isDark) {
+                    document.body.classList.add('dark');
+                    toggle.textContent = 'Light';
+                    toggle.setAttribute('aria-pressed', 'true');
+                } else {
+                    document.body.classList.remove('dark');
+                    toggle.textContent = 'Dark';
+                    toggle.setAttribute('aria-pressed', 'false');
+                }
+            };
+
+            // Initialize from localStorage
+            const stored = localStorage.getItem('darkMode');
+            const isDark = stored === '1' || (stored === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            apply(isDark);
+
+            toggle.addEventListener('click', function(){
+                const nowDark = !document.body.classList.contains('dark');
+                apply(nowDark);
+                try { localStorage.setItem('darkMode', nowDark ? '1' : '0'); } catch(e){}
+            });
+        })();
+
+        // Splitter: allow resizing sidebar and chat area horizontally
+        (function(){
+            const splitter = document.getElementById('splitter');
+            const sidebar = document.querySelector('.sidebar');
+            const mainContent = document.querySelector('.main-content');
+            if (!splitter || !sidebar || !mainContent) return;
+
+            const minWidth = 220; // px
+            const maxWidth = 600; // px
+
+            // Apply stored width if present
+            const stored = parseInt(localStorage.getItem('sidebarWidth'), 10);
+            if (!isNaN(stored)) {
+                sidebar.style.width = Math.min(Math.max(stored, minWidth), maxWidth) + 'px';
+            }
+
+            let dragging = false;
+
+            const startDrag = (clientX) => {
+                dragging = true;
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+            };
+
+            const doDrag = (clientX) => {
+                if (!dragging) return;
+                const rect = mainContent.getBoundingClientRect();
+                let newWidth = clientX - rect.left; // sidebar left is mainContent left
+                newWidth = Math.min(Math.max(newWidth, minWidth), maxWidth);
+                sidebar.style.width = newWidth + 'px';
+            };
+
+            const stopDrag = () => {
+                if (!dragging) return;
+                dragging = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                try { localStorage.setItem('sidebarWidth', parseInt(sidebar.style.width, 10)); } catch(e){}
+            };
+
+            splitter.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                startDrag(e.clientX);
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!dragging) return;
+                doDrag(e.clientX);
+            });
+
+            window.addEventListener('mouseup', (e) => {
+                stopDrag();
+            });
+
+            // Touch support
+            splitter.addEventListener('touchstart', (e) => {
+                startDrag(e.touches[0].clientX);
+            }, {passive:false});
+
+            window.addEventListener('touchmove', (e) => {
+                if (!dragging) return;
+                doDrag(e.touches[0].clientX);
+            }, {passive:false});
+
+            window.addEventListener('touchend', stopDrag);
+        })();
     </script>
 </body>
 </html>
