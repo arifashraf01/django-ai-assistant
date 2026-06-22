@@ -604,6 +604,10 @@
                         <strong>Current:</strong>
                         <div class="filename">{{ active_document.file.name|truncatechars:40 }}</div>
                         <div class="upload-date">{{ active_document.uploaded_at|date:"M d, Y" }}</div>
+                        <form method="post" style="margin-top:8px">
+                            {% csrf_token %}
+                            <button type="submit" name="remove_document" style="padding:6px 8px;font-size:12px">Remove Active Document</button>
+                        </form>
                     </div>
                     {% else %}
                     <div class="no-document-message">
@@ -631,9 +635,8 @@
             <div class="chat-section">
                 <!-- Chat Area -->
                 <div class="chat-area" id="chatArea">
-                    {% if active_document %}
-                        {% if messages %}
-                                {% for message in messages reversed %}
+                    {% if messages %}
+                        {% for message in messages reversed %}
                             <div class="message user">
                                 <div class="message-label">You</div>
                                 <div class="message-content">{{ message.user_message }}</div>
@@ -644,16 +647,10 @@
                                 <div class="message-content">{{ message.ai_response }}</div>
                                 <div class="message-timestamp">{{ message.created_at|localtime|date:"H:i" }}</div>
                             </div>
-                            {% endfor %}
-                        {% else %}
-                            <div class="chat-empty-state">
-                                <p>Upload a document and ask a question to get started.</p>
-                            </div>
-                        {% endif %}
+                        {% endfor %}
                     {% else %}
                         <div class="chat-empty-state">
-                            <p>No document loaded.</p>
-                            <p>Upload a PDF on the left to begin.</p>
+                            <p>No messages yet. Ask a question to start the conversation.</p>
                         </div>
                     {% endif %}
                 </div>
@@ -665,10 +662,13 @@
                         <textarea
                             name="message"
                             placeholder="Ask a question about your document..."
-                            {% if not active_document %}disabled{% endif %}
                         ></textarea>
                         <div class="input-controls">
-                            <button type="submit" id="sendButton" {% if not active_document %}disabled{% endif %}>
+                            <label style="display:flex;align-items:center;gap:8px;color:inherit">
+                                <input type="checkbox" name="no_document" id="noDocument">
+                                <span>Send without document</span>
+                            </label>
+                            <button type="submit" id="sendButton">
                                 Send
                             </button>
                             <button type="submit" name="clear_chat" id="clearButton">

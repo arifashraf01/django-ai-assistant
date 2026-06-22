@@ -186,3 +186,23 @@ def delete_document_collection(doc_id):
         client.delete_collection(name=collection_name)
     except Exception as e:
         print(f"Error deleting collection: {e}")
+
+
+def get_llm_response(user_question):
+    """
+    Get a direct LLM response from Ollama without using any document context.
+
+    Args:
+        user_question: The user's question as a string
+
+    Returns:
+        Response text from the model
+    """
+    try:
+        response = chat(
+            model="gemma3:4b",
+            messages=[{"role": "user", "content": user_question}]
+        )
+        return response["message"]["content"]
+    except Exception as e:
+        return f"Error generating response: {str(e)}"
