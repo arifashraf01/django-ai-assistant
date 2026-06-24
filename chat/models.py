@@ -11,6 +11,8 @@ class ChatMessage(models.Model):
         blank=True,
         related_name='chat_messages'
     )
+    # Session key to scope messages to a browser session
+    session_key = models.CharField(max_length=100, null=True, blank=True, db_index=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 

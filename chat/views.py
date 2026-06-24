@@ -17,9 +17,14 @@ def chatbot(request):
     response_text = ""
     active_document = None
 
-    # Clear chat history
+    # Ensure the session exists so we can scope chat history
+    if not request.session.session_key:
+        request.session.create()
+    session_key = request.session.session_key
+
+    # Clear chat history for this session
     if request.method == "POST" and "clear_chat" in request.POST:
-        ChatMessage.objects.all().delete()
+        ChatMessage.objects.filter(session_key=session_key).delete()
         return redirect("chatbot")
 
     # Remove active document (mark as not processed and delete chroma collection)
@@ -77,28 +82,45 @@ def chatbot(request):
         # Check if user requested to bypass document
         bypass = True if request.POST.get("no_document") in ["on", "true", "1"] else False
 
+        # Build conversation history from this session (last 15 pairs)
+        history_qs = ChatMessage.objects.filter(session_key=session_key).order_by("-created_at")[:15]
+        conversation_history = []
+        for cm in reversed(list(history_qs)):
+            conversation_history.append({"role": "user", "content": cm.user_message})
+            conversation_history.append({"role": "assistant", "content": cm.ai_response})
+
         # Get the most recent processed document
         documents = Document.objects.filter(is_processed=True).order_by("-uploaded_at")
 
         if documents.exists() and not bypass:
             active_document = documents.first()
-            # RAG Flow: Retrieve context -> Build prompt -> Get grounded answer
-            response_text = get_rag_response(active_document.id, user_message)
+            # RAG Flow: pass conversation history + document context
+            response_text = get_rag_response(active_document.id, user_message, conversation_history=conversation_history if conversation_history else None)
         else:
             # No active document or user chose to bypass -> direct agent response
-            response_text = get_llm_response(user_message)
+            response_text = get_llm_response(user_message, conversation_history=conversation_history if conversation_history else None)
             # when bypassing or no doc present, don't associate message with a document
             active_document = None
 
-        # Save chat message
+        # Save chat message scoped to this session
         ChatMessage.objects.create(
             user_message=user_message,
             ai_response=response_text,
-            document=active_document
+            document=active_document,
+            session_key=session_key,
         )
 
-    # Fetch all chat messages
-    chat_messages = ChatMessage.objects.order_by("-created_at")
+        # Trim history to last 15 pairs for this session
+        total = ChatMessage.objects.filter(session_key=session_key).count()
+        if total > 15:
+            extra = total - 15
+            old_qs = ChatMessage.objects.filter(session_key=session_key).order_by("created_at")[:extra]
+            # bulk delete
+            ids_to_delete = [o.id for o in old_qs]
+            ChatMessage.objects.filter(id__in=ids_to_delete).delete()
+
+    # Fetch only session-scoped chat messages
+    chat_messages = ChatMessage.objects.filter(session_key=session_key).order_by("-created_at")
     
     # Get the most recent processed document for context
     documents = Document.objects.filter(is_processed=True).order_by("-uploaded_at")

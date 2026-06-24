@@ -10,8 +10,28 @@ Handles:
 
 import os
 import chromadb
-from ollama import chat
 from .embedding_utils import model
+
+# Ollama client compatibility wrapper: different versions expose different APIs.
+# Try to import the top-level `chat` function, otherwise instantiate an Ollama
+# client and wrap its `chat` method. If neither is available, set to None so
+# callers can return a clear error.
+_ollama_chat = None
+try:
+    from ollama import chat as _chat_func
+    _ollama_chat = _chat_func
+except Exception:
+    try:
+        from ollama import Ollama
+
+        _ollama_client = Ollama()
+
+        def _chat_func(*args, **kwargs):
+            return _ollama_client.chat(*args, **kwargs)
+
+        _ollama_chat = _chat_func
+    except Exception:
+        _ollama_chat = None
 
 # Initialize ChromaDB client and collection
 DB_DIR = os.path.join(os.path.dirname(__file__), "..", "chroma_db")
@@ -131,7 +151,7 @@ INSTRUCTIONS:
     return prompt
 
 
-def get_rag_response(doc_id, user_question):
+def get_rag_response(doc_id, user_question, conversation_history=None):
     """
     Get a grounded answer from Ollama using RAG.
     
@@ -156,20 +176,52 @@ def get_rag_response(doc_id, user_question):
     
     # Step 2: Build RAG prompt
     rag_prompt = build_rag_prompt(user_question, chunks)
-    
+
+    # Build messages for the chat API. We include prior conversation messages
+    # (if any) so the model has the full turn history. Then we inject the
+    # document context as a system message before the current user question.
+    messages = []
+    if conversation_history:
+        # conversation_history should be a list of dicts: {role: 'user'|'assistant', content: '...'}
+        messages.extend(conversation_history)
+
+    # Add the retrieved document context as a system instruction so the model
+    # treats it as grounding information. This follows the requirement to send:
+    # 1) Conversation history
+    # 2) Retrieved document context
+    # 3) Current user question
+    messages.append({
+        "role": "system",
+        "content": "DOCUMENT_CONTEXT:\n\n" + "\n\n".join(chunks) + "\n\nINSTRUCTIONS: Answer using ONLY the provided document context. If the answer is not present, say: 'This information was not found in the uploaded document.'"
+    })
+
+    # Finally add the current user question
+    messages.append({"role": "user", "content": user_question})
+
     # Step 3 & 4: Send to Ollama and return response
+    if _ollama_chat is None:
+        return "Ollama client is not available. Install the `ollama` package."
+
     try:
-        response = chat(
+        response = _ollama_chat(
             model="gemma3:4b",
-            messages=[
-                {
-                    "role": "user",
-                    "content": rag_prompt
-                }
-            ]
+            messages=messages
         )
-        return response["message"]["content"]
-    
+
+        # Normalize response shapes across ollama versions
+        if isinstance(response, str):
+            return response
+        if isinstance(response, dict):
+            # Common shape: {"message": {"content": "..."}}
+            if "message" in response and isinstance(response["message"], dict) and "content" in response["message"]:
+                return response["message"]["content"]
+            # Alternate shape: {"content": "..."}
+            if "content" in response:
+                return response["content"]
+
+        # Fallback to string representation
+        return str(response)
+
     except Exception as e:
         return f"Error generating response: {str(e)}"
 
@@ -188,7 +240,7 @@ def delete_document_collection(doc_id):
         print(f"Error deleting collection: {e}")
 
 
-def get_llm_response(user_question):
+def get_llm_response(user_question, conversation_history=None):
     """
     Get a direct LLM response from Ollama without using any document context.
 
@@ -198,11 +250,30 @@ def get_llm_response(user_question):
     Returns:
         Response text from the model
     """
+    # Build messages list including conversation history so follow-ups work.
+    messages = []
+    if conversation_history:
+        messages.extend(conversation_history)
+
+    messages.append({"role": "user", "content": user_question})
+
+    if _ollama_chat is None:
+        return "Ollama client is not available. Install the `ollama` package."
+
     try:
-        response = chat(
+        response = _ollama_chat(
             model="gemma3:4b",
-            messages=[{"role": "user", "content": user_question}]
+            messages=messages
         )
-        return response["message"]["content"]
+
+        if isinstance(response, str):
+            return response
+        if isinstance(response, dict):
+            if "message" in response and isinstance(response["message"], dict) and "content" in response["message"]:
+                return response["message"]["content"]
+            if "content" in response:
+                return response["content"]
+
+        return str(response)
     except Exception as e:
         return f"Error generating response: {str(e)}"
