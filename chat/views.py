@@ -4,6 +4,9 @@ from .models import ChatMessage, Document
 from .forms import DocumentForm
 from .pdf_utils import extract_text_from_pdf, chunk_text
 from .rag_utils import store_document_chunks, get_rag_response, get_llm_response, delete_document_collection
+from .rag_utils import stream_llm_response
+from django.http import StreamingHttpResponse, HttpResponseBadRequest
+from django.views.decorators.csrf import csrf_exempt
 
 
 def chatbot(request):
@@ -24,7 +27,26 @@ def chatbot(request):
 
     # Clear chat history for this session
     if request.method == "POST" and "clear_chat" in request.POST:
+
+         # Delete chat history
         ChatMessage.objects.filter(session_key=session_key).delete()
+
+         # Remove active document
+        documents = Document.objects.filter(is_processed=True)
+
+        for doc in documents:
+           try:
+            delete_document_collection(doc.id)
+           except Exception:
+            pass
+
+        documents.delete()
+
+        # Clear session
+        request.session.flush()
+
+        messages.success(request, "Chat history and active document cleared.")
+
         return redirect("chatbot")
 
     # Remove active document (mark as not processed and delete chroma collection)
@@ -154,3 +176,72 @@ def chatbot(request):
             "documents": documents,
         }
     )
+
+
+@csrf_exempt
+def stream_chat(request):
+    """Stream chat responses for simple (no-PDF) conversations.
+
+    Accepts POST with 'message' and optional 'no_document'. Streams text chunks
+    (plain text) as they arrive from the model. If a document is active and
+    not bypassed, falls back to synchronous RAG response (single chunk).
+    """
+    if request.method != "POST":
+        return HttpResponseBadRequest("POST required")
+
+    user_message = request.POST.get("message")
+    if not user_message:
+        return HttpResponseBadRequest("Missing message")
+
+    bypass = True if request.POST.get("no_document") in ["on", "true", "1"] else False
+
+    # session
+    if not request.session.session_key:
+        request.session.create()
+    session_key = request.session.session_key
+
+    # Build short history for speed
+    history_qs = ChatMessage.objects.filter(session_key=session_key).order_by("-created_at")[:15]
+    conversation_history = []
+    for cm in reversed(list(history_qs)):
+        conversation_history.append({"role": "user", "content": cm.user_message})
+        conversation_history.append({"role": "assistant", "content": cm.ai_response})
+
+    # Check for active document
+    documents = Document.objects.filter(is_processed=True).order_by("-uploaded_at")
+    if documents.exists() and not bypass:
+        # For RAG we don't stream here; return a single response and let client handle it
+        active_document = documents.first()
+        resp_text = get_rag_response(active_document.id, user_message, conversation_history=conversation_history if conversation_history else None)
+
+        # Save message and return as single chunk
+        ChatMessage.objects.create(user_message=user_message, ai_response=resp_text, document=active_document, session_key=session_key)
+
+        return StreamingHttpResponse((resp_text,), content_type='text/plain')
+
+    # No document: stream from LLM using FAST_OLLAMA_MODEL
+    from django.conf import settings as djsettings
+    model_name = getattr(djsettings, 'FAST_OLLAMA_MODEL', None)
+
+    def stream_generator():
+        buffer = []
+        try:
+            for piece in stream_llm_response(user_message, conversation_history=conversation_history if conversation_history else None, model_name=model_name):
+                text = piece if isinstance(piece, str) else str(piece)
+                buffer.append(text)
+                yield text
+        except GeneratorExit:
+            return
+        finally:
+            # After streaming completes, persist the final assistant response
+            try:
+                final_text = ''.join(buffer).strip()
+                if final_text:
+                    ChatMessage.objects.create(user_message=user_message, ai_response=final_text, document=None, session_key=session_key)
+            except Exception:
+                pass
+
+    # Save a placeholder chat message will be updated after completion (optional)
+    # We'll append final response after streaming completes on client side
+
+    return StreamingHttpResponse(stream_generator(), content_type='text/plain')

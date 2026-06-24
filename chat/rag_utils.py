@@ -12,6 +12,8 @@ import os
 import chromadb
 from .embedding_utils import model
 from django.conf import settings
+import shutil
+import glob
 
 # Ollama client compatibility wrapper: different versions expose different APIs.
 # Try to import the top-level `chat` function, otherwise instantiate an Ollama
@@ -48,10 +50,41 @@ def get_or_create_collection(doc_id):
     Each uploaded PDF gets its own collection to maintain separation.
     """
     collection_name = f"doc_{doc_id}"
-    return client.get_or_create_collection(
-        name=collection_name,
-        metadata={"hnsw:space": "cosine"}
-    )
+
+    try:
+        return client.get_or_create_collection(
+            name=collection_name,
+            metadata={"hnsw:space": "cosine"}
+        )
+    except Exception as e:
+        # Detect common SQLite schema mismatch errors from an old/corrupt
+        # ChromaDB sqlite file (e.g., "no such column: collections.topic").
+        msg = str(e).lower()
+        if "no such column" in msg or "collections.topic" in msg or "database disk image is malformed" in msg:
+            print(f"ChromaDB schema error detected: {e}; attempting to reset chroma DB at {DB_DIR}")
+            try:
+                # Remove existing chroma_db files so ChromaDB can recreate schema
+                for path in glob.glob(os.path.join(DB_DIR, "*")):
+                    try:
+                        if os.path.isdir(path):
+                            shutil.rmtree(path)
+                        else:
+                            os.remove(path)
+                    except Exception:
+                        pass
+
+                # Recreate client and retry
+                globals()['client'] = chromadb.PersistentClient(path=DB_DIR)
+                return client.get_or_create_collection(
+                    name=collection_name,
+                    metadata={"hnsw:space": "cosine"}
+                )
+            except Exception as e2:
+                print(f"Failed to reset ChromaDB: {e2}")
+                raise
+
+        # otherwise, re-raise the original exception
+        raise
 
 
 def store_document_chunks(doc_id, chunks):
@@ -76,7 +109,9 @@ def store_document_chunks(doc_id, chunks):
     # Store in ChromaDB with metadata
     ids = [f"chunk_{i}" for i in range(len(chunks))]
     metadatas = [{"doc_id": str(doc_id), "chunk_index": i} for i in range(len(chunks))]
-    
+    print(f"INDEXING DOC ID: {doc_id}")
+    print(f"COLLECTION NAME: doc_{doc_id}")
+    print(f"CHUNKS STORED: {len(chunks)}")
     collection.add(
         ids=ids,
         embeddings=embeddings,
@@ -104,13 +139,13 @@ def retrieve_relevant_chunks(doc_id, query, top_k=3):
         
         # Convert query to embedding
         query_embedding = model.encode([query]).tolist()[0]
-        
+      
         # Search ChromaDB for similar chunks
         results = collection.query(
             query_embeddings=[query_embedding],
             n_results=min(top_k, 5)  # Retrieve up to 5, return top_k
         )
-        
+      
         # Extract and return chunk texts
         if results and results["documents"]:
             return results["documents"][0]  # Return first (and only) query's results
@@ -121,34 +156,31 @@ def retrieve_relevant_chunks(doc_id, query, top_k=3):
         print(f"Error retrieving chunks: {e}")
         return []
 
-
 def build_rag_prompt(question, chunks):
     """
     Build a RAG prompt with retrieved context and user question.
-    
-    Args:
-        question: User's question
-        chunks: Retrieved context chunks
-    
-    Returns:
-        Formatted prompt for the LLM
     """
     context = "\n\n".join(chunks)
-    
-    prompt = f"""Based on the provided context, answer the user's question.
 
-CONTEXT:
+    prompt = f"""
+You are answering questions about a document.
+
+Document Content:
 {context}
 
-QUESTION:
+User Question:
 {question}
 
-INSTRUCTIONS:
-- Answer only based on the provided context
-- Be concise and direct
-- If the answer is not in the context, say: "This information was not found in the uploaded document."
-- Do not make up or use external knowledge"""
-    
+Rules:
+1. Answer ONLY using information from the document content.
+2. If the answer exists in the document, provide it clearly.
+3. Summarize relevant information when appropriate.
+4. Do NOT say "information not found" unless the document truly contains no relevant information.
+5. Keep the answer concise but complete.
+
+Answer:
+"""
+
     return prompt
 
 
@@ -182,22 +214,14 @@ def get_rag_response(doc_id, user_question, conversation_history=None, model_nam
     # (if any) so the model has the full turn history. Then we inject the
     # document context as a system message before the current user question.
     messages = []
+
     if conversation_history:
-        # conversation_history should be a list of dicts: {role: 'user'|'assistant', content: '...'}
-        messages.extend(conversation_history)
+        messages.extend(conversation_history[-2:])  # keep recent context only
 
-    # Add the retrieved document context as a system instruction so the model
-    # treats it as grounding information. This follows the requirement to send:
-    # 1) Conversation history
-    # 2) Retrieved document context
-    # 3) Current user question
     messages.append({
-        "role": "system",
-        "content": "DOCUMENT_CONTEXT:\n\n" + "\n\n".join(chunks) + "\n\nINSTRUCTIONS: Answer using ONLY the provided document context. If the answer is not present, say: 'This information was not found in the uploaded document.'"
+    "role": "user",
+    "content": rag_prompt 
     })
-
-    # Finally add the current user question
-    messages.append({"role": "user", "content": user_question})
 
     # Step 3 & 4: Send to Ollama and return response
     if _ollama_chat is None:
@@ -209,7 +233,7 @@ def get_rag_response(doc_id, user_question, conversation_history=None, model_nam
             model=_model,
             messages=messages
         )
-
+        print("OLLAMA RAW RESPONSE:", response)
         # Normalize response shapes across ollama versions and return only the
         # assistant content (trimmed). Handle dicts, simple strings, and
         # response objects that expose a `message` with `content`.
@@ -309,3 +333,84 @@ def get_llm_response(user_question, conversation_history=None, model_name=None):
         return str(response).strip()
     except Exception as e:
         return f"Error generating response: {str(e)}"
+
+
+def stream_llm_response(user_question, conversation_history=None, model_name=None):
+    """
+    Stream LLM response as an iterator of text chunks. Falls back to a single
+    message if the client doesn't support streaming.
+    """
+    if _ollama_chat is None:
+        yield "Ollama client is not available. Install the `ollama` package."
+        return
+
+    _model = model_name or getattr(settings, "DEFAULT_OLLAMA_MODEL", "gemma3:4b")
+
+    messages = []
+    if conversation_history:
+        messages.extend(conversation_history)
+    messages.append({"role": "user", "content": user_question})
+
+    try:
+        # Many clients support a `stream=True` flag that returns an iterator.
+        response_iter = None
+        try:
+            response_iter = _ollama_chat(model=_model, messages=messages, stream=True)
+        except TypeError:
+            # client may not accept stream kwarg
+            response_iter = None
+
+        if response_iter is None:
+            # No streaming support; produce a single response
+            resp = _ollama_chat(model=_model, messages=messages)
+            # reuse normalization logic
+            text = None
+            if isinstance(resp, str):
+                text = resp.strip()
+            elif isinstance(resp, dict):
+                if "message" in resp and isinstance(resp["message"], dict) and "content" in resp["message"]:
+                    text = str(resp["message"]["content"]).strip()
+                elif "content" in resp:
+                    text = str(resp["content"]).strip()
+            elif hasattr(resp, "message"):
+                msg = getattr(resp, "message")
+                if isinstance(msg, dict) and "content" in msg:
+                    text = str(msg["content"]).strip()
+                elif hasattr(msg, "content"):
+                    text = str(getattr(msg, "content")).strip()
+            if text is None:
+                text = str(resp).strip()
+
+            yield text
+            return
+
+        # If we have an iterable response, yield chunks as they come
+        for chunk in response_iter:
+            # chunk may be dict/string/object; normalize minimally
+            out = None
+            if isinstance(chunk, str):
+                out = chunk
+            elif isinstance(chunk, dict):
+                # some stream events include incremental content
+                if "delta" in chunk and isinstance(chunk["delta"], dict) and "content" in chunk["delta"]:
+                    out = str(chunk["delta"]["content"])
+                elif "message" in chunk and isinstance(chunk["message"], dict) and "content" in chunk["message"]:
+                    out = str(chunk["message"]["content"])
+                elif "content" in chunk:
+                    out = str(chunk["content"])
+            else:
+                # object-like responses (e.g., ollama._types.ChatResponse)
+                if hasattr(chunk, "message"):
+                    msg = getattr(chunk, "message")
+                    if isinstance(msg, dict) and "content" in msg:
+                        out = str(msg["content"])
+                    elif hasattr(msg, "content"):
+                        out = str(getattr(msg, "content"))
+                elif hasattr(chunk, "content"):
+                    out = str(getattr(chunk, "content"))
+
+            if out:
+                yield out
+
+    except Exception as e:
+        yield f"Error streaming response: {str(e)}"

@@ -698,10 +698,73 @@
                 sendButton.disabled = !this.value.trim() || this.disabled;
             });
 
-            messageForm.addEventListener('submit', function(e) {
-                if (sendButton.name !== 'clear_chat') {
-                    sendButton.disabled = true;
-                    sendButton.textContent = 'Sending...';
+            // Intercept submit to support streaming for simple chats (no document)
+           messageForm.addEventListener('submit', async function(e) {
+
+    const submitter = e.submitter;
+
+    // Allow Clear History button to submit normally
+    if (submitter && submitter.name === 'clear_chat') {
+        return;
+    }
+
+    e.preventDefault();
+
+    const formData = new FormData(messageForm);
+                const noDoc = formData.get('no_document');
+
+                // UI: show user's message immediately
+                const userMsg = document.createElement('div');
+                userMsg.className = 'message user';
+                userMsg.innerHTML = `<div class="message-label">You</div><div class="message-content">${(formData.get('message')||'').replace(/\n/g,'<br/>')}</div>`;
+                chatArea.appendChild(userMsg);
+
+                // Create assistant container with a unique stream id so multiple
+                // concurrent/serial messages don't overwrite the first container.
+                const assistantBox = document.createElement('div');
+                assistantBox.className = 'message assistant';
+                const streamId = 'streamContent-' + Date.now() + '-' + Math.floor(Math.random()*100000);
+                assistantBox.innerHTML = `<div class="message-label">Assistant</div><div class="message-content" id="${streamId}"></div>`;
+                chatArea.appendChild(assistantBox);
+                chatArea.scrollTop = chatArea.scrollHeight;
+
+                sendButton.disabled = true;
+                sendButton.textContent = 'Sending...';
+
+                try {
+                    const resp = await fetch('{% url "stream_chat" %}', {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'same-origin'
+                    });
+
+                    if (!resp.ok) {
+                        const text = await resp.text();
+                        document.getElementById('streamContent').innerText = 'Error: ' + text;
+                        return;
+                    }
+
+                    // Stream the response body
+                    const reader = resp.body.getReader();
+                    const decoder = new TextDecoder();
+                    let done = false;
+                    while (!done) {
+                        const { value, done: readerDone } = await reader.read();
+                        done = readerDone;
+                        if (value) {
+                            const chunk = decoder.decode(value, { stream: true });
+                            const el = document.getElementById(streamId);
+                            if (el) el.innerHTML += chunk.replace(/\n/g,'<br/>');
+                            chatArea.scrollTop = chatArea.scrollHeight;
+                        }
+                    }
+
+                } catch (err) {
+                    document.getElementById('streamContent').innerText = 'Error: ' + err.message;
+                } finally {
+                    sendButton.disabled = false;
+                    sendButton.textContent = 'Send';
+                    textarea.value = '';
                 }
             });
         }
