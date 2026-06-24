@@ -58,7 +58,7 @@
 
         /* ===== LEFT SIDEBAR (DOCUMENTS & UPLOAD) ===== */
         .sidebar {
-            width: 320px;
+            width: 30%;
             display: flex;
             flex-direction: column;
             gap: 20px;
@@ -635,20 +635,20 @@
             <div class="chat-section">
                 <!-- Chat Area -->
                 <div class="chat-area" id="chatArea">
-                    {% if messages %}
-                        {% for message in messages reversed %}
-                            <div class="message user">
-                                <div class="message-label">You</div>
-                                <div class="message-content">{{ message.user_message }}</div>
-                                <div class="message-timestamp">{{ message.created_at|localtime|date:"H:i" }}</div>
-                            </div>
-                            <div class="message assistant">
-                                <div class="message-label">Assistant</div>
-                                <div class="message-content">{{ message.ai_response }}</div>
-                                <div class="message-timestamp">{{ message.created_at|localtime|date:"H:i" }}</div>
-                            </div>
-                        {% endfor %}
-                    {% else %}
+                    {% if chat_messages %}
+                            {% for message in chat_messages reversed %}
+                                <div class="message user">
+                                    <div class="message-label">You</div>
+                                    <div class="message-content">{{ message.user_message|linebreaksbr }}</div>
+                                    <div class="message-timestamp">{{ message.created_at|localtime|date:"H:i" }}</div>
+                                </div>
+                                <div class="message assistant">
+                                    <div class="message-label">Assistant</div>
+                                    <div class="message-content">{{ message.ai_response|linebreaksbr }}</div>
+                                    <div class="message-timestamp">{{ message.created_at|localtime|date:"H:i" }}</div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
                         <div class="chat-empty-state">
                             <p>No messages yet. Ask a question to start the conversation.</p>
                         </div>

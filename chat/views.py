@@ -131,7 +131,7 @@ def chatbot(request):
         "chat/chat.html",
         {
             "response": response_text,
-            "messages": chat_messages,
+            "chat_messages": chat_messages,
             "document_form": DocumentForm(),
             "active_document": active_document,
             "documents": documents,

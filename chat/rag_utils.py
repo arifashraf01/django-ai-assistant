@@ -208,19 +208,36 @@ def get_rag_response(doc_id, user_question, conversation_history=None):
             messages=messages
         )
 
-        # Normalize response shapes across ollama versions
+        # Normalize response shapes across ollama versions and return only the
+        # assistant content (trimmed). Handle dicts, simple strings, and
+        # response objects that expose a `message` with `content`.
         if isinstance(response, str):
-            return response
+            return response.strip()
+
         if isinstance(response, dict):
             # Common shape: {"message": {"content": "..."}}
             if "message" in response and isinstance(response["message"], dict) and "content" in response["message"]:
-                return response["message"]["content"]
+                return str(response["message"]["content"]).strip()
             # Alternate shape: {"content": "..."}
             if "content" in response:
-                return response["content"]
+                return str(response["content"]).strip()
 
-        # Fallback to string representation
-        return str(response)
+        # Object shapes: response.message may be an object with a .content attr
+        if hasattr(response, "message"):
+            msg = getattr(response, "message")
+            if isinstance(msg, dict) and "content" in msg:
+                return str(msg["content"]).strip()
+            if hasattr(msg, "content"):
+                return str(getattr(msg, "content")).strip()
+
+        # Direct attributes on response
+        if hasattr(response, "content"):
+            return str(getattr(response, "content")).strip()
+        if hasattr(response, "text"):
+            return str(getattr(response, "text")).strip()
+
+        # Fallback: string representation (trimmed)
+        return str(response).strip()
 
     except Exception as e:
         return f"Error generating response: {str(e)}"
@@ -267,13 +284,25 @@ def get_llm_response(user_question, conversation_history=None):
         )
 
         if isinstance(response, str):
-            return response
+            return response.strip()
         if isinstance(response, dict):
             if "message" in response and isinstance(response["message"], dict) and "content" in response["message"]:
-                return response["message"]["content"]
+                return str(response["message"]["content"]).strip()
             if "content" in response:
-                return response["content"]
+                return str(response["content"]).strip()
 
-        return str(response)
+        if hasattr(response, "message"):
+            msg = getattr(response, "message")
+            if isinstance(msg, dict) and "content" in msg:
+                return str(msg["content"]).strip()
+            if hasattr(msg, "content"):
+                return str(getattr(msg, "content")).strip()
+
+        if hasattr(response, "content"):
+            return str(getattr(response, "content")).strip()
+        if hasattr(response, "text"):
+            return str(getattr(response, "text")).strip()
+
+        return str(response).strip()
     except Exception as e:
         return f"Error generating response: {str(e)}"
