@@ -95,10 +95,27 @@ def chatbot(request):
         if documents.exists() and not bypass:
             active_document = documents.first()
             # RAG Flow: pass conversation history + document context
-            response_text = get_rag_response(active_document.id, user_message, conversation_history=conversation_history if conversation_history else None)
+            response_text = get_rag_response(
+                active_document.id,
+                user_message,
+                conversation_history=conversation_history if conversation_history else None,
+            )
         else:
             # No active document or user chose to bypass -> direct agent response
-            response_text = get_llm_response(user_message, conversation_history=conversation_history if conversation_history else None)
+            # For simple chat without a document, only send a small recent history
+            # to the LLM (e.g., last 2 pairs) to keep prompts small and responses fast.
+            if conversation_history:
+                # conversation_history is ordered oldest->newest; take last 4 entries
+                short_history = conversation_history[-4:]
+            else:
+                short_history = None
+
+            from django.conf import settings as djsettings
+            response_text = get_llm_response(
+                user_message,
+                conversation_history=short_history,
+                model_name=getattr(djsettings, "FAST_OLLAMA_MODEL", None),
+            )
             # when bypassing or no doc present, don't associate message with a document
             active_document = None
 

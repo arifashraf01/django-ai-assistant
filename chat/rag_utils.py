@@ -11,6 +11,7 @@ Handles:
 import os
 import chromadb
 from .embedding_utils import model
+from django.conf import settings
 
 # Ollama client compatibility wrapper: different versions expose different APIs.
 # Try to import the top-level `chat` function, otherwise instantiate an Ollama
@@ -151,7 +152,7 @@ INSTRUCTIONS:
     return prompt
 
 
-def get_rag_response(doc_id, user_question, conversation_history=None):
+def get_rag_response(doc_id, user_question, conversation_history=None, model_name=None):
     """
     Get a grounded answer from Ollama using RAG.
     
@@ -203,8 +204,9 @@ def get_rag_response(doc_id, user_question, conversation_history=None):
         return "Ollama client is not available. Install the `ollama` package."
 
     try:
+        _model = model_name or getattr(settings, "DEFAULT_OLLAMA_MODEL", "gemma3:4b")
         response = _ollama_chat(
-            model="gemma3:4b",
+            model=_model,
             messages=messages
         )
 
@@ -257,7 +259,7 @@ def delete_document_collection(doc_id):
         print(f"Error deleting collection: {e}")
 
 
-def get_llm_response(user_question, conversation_history=None):
+def get_llm_response(user_question, conversation_history=None, model_name=None):
     """
     Get a direct LLM response from Ollama without using any document context.
 
@@ -278,8 +280,9 @@ def get_llm_response(user_question, conversation_history=None):
         return "Ollama client is not available. Install the `ollama` package."
 
     try:
+        _model = model_name or getattr(settings, "DEFAULT_OLLAMA_MODEL", "gemma3:4b")
         response = _ollama_chat(
-            model="gemma3:4b",
+            model=_model,
             messages=messages
         )
 

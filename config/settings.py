@@ -118,3 +118,7 @@ USE_TZ = True
 STATIC_URL = 'static/'
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Ollama model configuration: use a smaller/faster model for simple chat (no PDF)
+DEFAULT_OLLAMA_MODEL = "gemma3:4b"
+FAST_OLLAMA_MODEL = "gemma2:1b"
