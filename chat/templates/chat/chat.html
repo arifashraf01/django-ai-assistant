@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-{% load tz %}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -54,6 +53,8 @@
             overflow: hidden;
             gap: 20px;
             padding: 20px;
+            width: 100%;
+            align-items: stretch;
         }
 
         /* ===== LEFT SIDEBAR (DOCUMENTS & UPLOAD) ===== */
@@ -82,11 +83,11 @@
             letter-spacing: 0.5px;
         }
 
-        /* Active Document Display (light mode default) */
+        /* Active Document Display */
         .active-document {
             padding: 12px;
-            background-color: #f0f0f0; /* original light-mode background */
-            border: 1px solid #d0d0d0; /* original light-mode border */
+            background-color: #f0f0f0;
+            border: 1px solid #d0d0d0;
             color: #000000;
             font-size: 12px;
         }
@@ -182,15 +183,17 @@
 
         /* ===== RIGHT SECTION (CHAT) ===== */
         .chat-section {
-            flex: 1;
+            flex: 1 1 auto;
             display: flex;
             flex-direction: column;
             background-color: #ffffff;
+            min-width: 0;
         }
 
         /* Chat Area */
         .chat-area {
-            flex: 1;
+            flex: 1 1 auto;
+            min-height: 0;
             overflow-y: auto;
             padding: 15px 0;
             border: 1px solid #e0e0e0;
@@ -199,6 +202,7 @@
             display: flex;
             flex-direction: column;
         }
+
         /* Splitter styles */
         .splitter {
             width: 8px;
@@ -214,183 +218,6 @@
             background: rgba(0,0,0,0.08);
         }
 
-        /* Dark-mode splitter contrast */
-        body.dark .splitter {
-            background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-        }
-        /* Enforce no-white backgrounds in dark mode (override later base styles) */
-        body.dark .message.user {
-            background-color: var(--box-blue) !important;
-            color: var(--text) !important;
-        }
-
-        body.dark .message.assistant {
-            background-color: var(--box-blue-2) !important;
-            color: var(--text) !important;
-            border-left-color: var(--box-blue-2) !important;
-        }
-
-        body.dark .system-message {
-            background-color: #020304 !important;
-            border-left-color: var(--box-blue) !important;
-            color: var(--text) !important;
-        }
-        /* Dark mode overrides — strict no-white palette (black + blue tones) */
-        :root {
-            --bg: #000000;
-            --panel: #030507; /* near-black for panels */
-            --box-blue: #05203a; /* darker blue for assistant/user boxes */
-            --box-blue-2: #08305a; /* slightly lighter blue */
-            --muted: #9aa0a6; /* grey for labels/timestamps */
-            --border: #04121b;
-            --text: #ffffff;
-        }
-
-        body.dark, .dark {
-            background-color: var(--bg);
-            color: var(--text);
-        }
-
-        /* Force all textual content white in dark mode to satisfy request */
-        body.dark * {
-            color: var(--text) !important;
-        }
-
-        body.dark .header,
-        .dark .header {
-            background-color: var(--bg);
-            border-bottom-color: var(--border);
-        }
-
-        body.dark .sidebar,
-        .dark .sidebar {
-            background-color: var(--panel);
-            border-right-color: var(--border);
-        }
-
-        body.dark .sidebar-section,
-        .dark .sidebar-section {
-            background-color: #04060a;
-            border-color: var(--border);
-            color: var(--muted);
-        }
-
-        body.dark .chat-section,
-        .dark .chat-section {
-            background-color: var(--bg);
-        }
-
-        body.dark .chat-area {
-            background-color: var(--bg);
-            border-color: var(--border);
-        }
-
-        /* Message boxes use blue tones (no white anywhere) */
-        body.dark .message.user {
-            background-color: var(--box-blue);
-            color: var(--text);
-            margin-left: 40px;
-        }
-
-        body.dark .message.assistant {
-            background-color: var(--box-blue-2);
-            color: var(--text);
-            margin-right: 40px;
-            border-left-color: var(--box-blue-2);
-            padding-left: 19px;
-        }
-
-        .message-label {
-            color: var(--muted);
-        }
-
-        .message-content {
-            color: var(--text);
-        }
-
-        .message-timestamp {
-            color: var(--muted);
-        }
-
-        body.dark .input-section,
-        .dark .input-section {
-            background-color: var(--panel);
-            border-color: var(--border);
-        }
-
-        body.dark .input-section textarea {
-            background-color: #020304;
-            color: var(--text);
-        }
-
-        body.dark .input-controls {
-            background-color: var(--panel);
-            border-top-color: var(--border);
-        }
-
-        body.dark .input-controls button {
-            background-color: var(--box-blue-2);
-            color: var(--text);
-            border: 1px solid var(--border);
-        }
-
-        body.dark .input-controls button[name="clear_chat"] {
-            background-color: var(--box-blue);
-        }
-
-        .theme-toggle {
-            float: right;
-            margin-top: -36px;
-        }
-
-        .theme-toggle button {
-            padding: 6px 10px;
-            font-size: 12px;
-            background: var(--panel);
-            border: 1px solid var(--border);
-            color: var(--text);
-            cursor: pointer;
-        }
-
-        /* Recent items in the sidebar (small blue boxes) */
-        .sidebar .recent-item,
-        .sidebar .recent-queries,
-        .sidebar a.recent-item {
-            display: block;
-            background: var(--box-blue);
-            color: var(--text);
-            padding: 10px 12px;
-            margin-bottom: 10px;
-            border: 1px solid var(--border);
-            text-decoration: none;
-        }
-
-        /* In dark mode, make active-document a blue box */
-        body.dark .active-document {
-            background-color: var(--box-blue-2) !important;
-            border-color: var(--border) !important;
-            color: var(--text) !important;
-        }
-
-        /* Make the chat area take the remaining width and fit full height */
-        .main-content {
-            width: 100%;
-            display: flex;
-            align-items: stretch;
-        }
-
-        .chat-section {
-            flex: 1 1 auto;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-
-        .chat-area {
-            flex: 1 1 auto;
-            min-height: 0;
-        }
-
         .chat-empty-state {
             margin: auto;
             text-align: center;
@@ -399,7 +226,7 @@
             padding: 40px 20px;
         }
 
-        /* Message Styles (ChatGPT-style) */
+        /* Message Styles */
         .message {
             padding: 12px 20px;
             margin-bottom: 8px;
@@ -439,6 +266,44 @@
             font-size: 11px;
             color: #999999;
             margin-top: 6px;
+        }
+
+        /* Typing indicator */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 20px;
+            color: #666666;
+            font-size: 13px;
+            font-style: italic;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .typing-dots span {
+            width: 6px;
+            height: 6px;
+            background-color: #999999;
+            border-radius: 50%;
+            display: inline-block;
+            animation: typing-bounce 1.2s ease-in-out infinite;
+        }
+
+        .typing-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing-bounce {
+            0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
         }
 
         /* Input Section */
@@ -510,18 +375,6 @@
             background-color: #333333;
         }
 
-        /* Loading Indicator */
-        .loading {
-            display: none;
-            padding: 8px 12px;
-            color: #666666;
-            font-size: 13px;
-        }
-
-        .loading.active {
-            display: block;
-        }
-
         /* Responsiveness */
         @media (max-width: 768px) {
             .main-content {
@@ -566,6 +419,137 @@
         .chat-area::-webkit-scrollbar-thumb:hover,
         .sidebar::-webkit-scrollbar-thumb:hover {
             background: #999999;
+        }
+
+        /* ===== DARK MODE ===== */
+        :root {
+            --bg: #000000;
+            --panel: #030507;
+            --box-blue: #05203a;
+            --box-blue-2: #08305a;
+            --muted: #9aa0a6;
+            --border: #04121b;
+            --text: #ffffff;
+        }
+
+        body.dark, .dark {
+            background-color: var(--bg);
+            color: var(--text);
+        }
+
+        body.dark * {
+            color: var(--text) !important;
+        }
+
+        body.dark .header,
+        .dark .header {
+            background-color: var(--bg);
+            border-bottom-color: var(--border);
+        }
+
+        body.dark .sidebar,
+        .dark .sidebar {
+            background-color: var(--panel);
+            border-right-color: var(--border);
+        }
+
+        body.dark .sidebar-section,
+        .dark .sidebar-section {
+            background-color: #04060a;
+            border-color: var(--border);
+            color: var(--muted);
+        }
+
+        body.dark .chat-section,
+        .dark .chat-section {
+            background-color: var(--bg);
+        }
+
+        body.dark .chat-area {
+            background-color: var(--bg);
+            border-color: var(--border);
+        }
+
+        body.dark .message.user {
+            background-color: var(--box-blue) !important;
+            color: var(--text) !important;
+            margin-left: 40px;
+        }
+
+        body.dark .message.assistant {
+            background-color: var(--box-blue-2) !important;
+            color: var(--text) !important;
+            margin-right: 40px;
+            border-left-color: var(--box-blue-2) !important;
+            padding-left: 19px;
+        }
+
+        body.dark .system-message {
+            background-color: #020304 !important;
+            border-left-color: var(--box-blue) !important;
+            color: var(--text) !important;
+        }
+
+        body.dark .input-section,
+        .dark .input-section {
+            background-color: var(--panel);
+            border-color: var(--border);
+        }
+
+        body.dark .input-section textarea {
+            background-color: #020304;
+            color: var(--text);
+        }
+
+        body.dark .input-controls {
+            background-color: var(--panel);
+            border-top-color: var(--border);
+        }
+
+        body.dark .input-controls button {
+            background-color: var(--box-blue-2);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        body.dark .input-controls button[name="clear_chat"] {
+            background-color: var(--box-blue);
+        }
+
+        body.dark .active-document {
+            background-color: var(--box-blue-2) !important;
+            border-color: var(--border) !important;
+            color: var(--text) !important;
+        }
+
+        body.dark .splitter {
+            background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+        }
+
+        .theme-toggle {
+            float: right;
+            margin-top: -36px;
+        }
+
+        .theme-toggle button {
+            padding: 6px 10px;
+            font-size: 12px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .message-label {
+            color: var(--muted);
+        }
+
+        .message-content {
+            color: var(--text);
+        }
+
+        .message-timestamp {
+            color: var(--muted);
         }
     </style>
 </head>
@@ -636,22 +620,22 @@
                 <!-- Chat Area -->
                 <div class="chat-area" id="chatArea">
                     {% if chat_messages %}
-                            {% for message in chat_messages reversed %}
-                                <div class="message user">
-                                    <div class="message-label">You</div>
-                                    <div class="message-content">{{ message.user_message|linebreaksbr }}</div>
-                                    <div class="message-timestamp">{{ message.created_at|localtime|date:"H:i" }}</div>
-                                </div>
-                                <div class="message assistant">
-                                    <div class="message-label">Assistant</div>
-                                    <div class="message-content">{{ message.ai_response|linebreaksbr }}</div>
-                                    <div class="message-timestamp">{{ message.created_at|localtime|date:"H:i" }}</div>
-                                </div>
-                            {% endfor %}
-                        {% else %}
-                        <div class="chat-empty-state">
-                            <p>No messages yet. Ask a question to start the conversation.</p>
-                        </div>
+                        {% for message in chat_messages reversed %}
+                            <div class="message user">
+                                <div class="message-label">You</div>
+                                <div class="message-content">{{ message.user_message|linebreaksbr }}</div>
+                                <div class="message-timestamp">{{ message.created_at|date:"H:i" }}</div>
+                            </div>
+                            <div class="message assistant">
+                                <div class="message-label">Assistant</div>
+                                <div class="message-content">{{ message.ai_response|linebreaksbr }}</div>
+                                <div class="message-timestamp">{{ message.created_at|date:"H:i" }}</div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                    <div class="chat-empty-state" id="emptyState">
+                        <p>No messages yet. Ask a question to start the conversation.</p>
+                    </div>
                     {% endif %}
                 </div>
 
@@ -660,6 +644,7 @@
                     <form method="post" id="messageForm">
                         {% csrf_token %}
                         <textarea
+                            id="messageInput"
                             name="message"
                             placeholder="Ask a question about your document..."
                         ></textarea>
@@ -668,7 +653,7 @@
                                 <input type="checkbox" name="no_document" id="noDocument">
                                 <span>Send without document</span>
                             </label>
-                            <button type="submit" id="sendButton">
+                            <button type="submit" id="sendButton" disabled>
                                 Send
                             </button>
                             <button type="submit" name="clear_chat" id="clearButton">
@@ -682,54 +667,125 @@
     </div>
 
     <script>
-        // Auto-scroll chat to bottom when page loads
-        const chatArea = document.getElementById('chatArea');
-        if (chatArea) {
-            chatArea.scrollTop = chatArea.scrollHeight;
-        }
+        (function () {
+            'use strict';
 
-        // Update button state based on textarea content
-        const textarea = document.querySelector('textarea[name="message"]');
-        const sendButton = document.getElementById('sendButton');
-        const messageForm = document.getElementById('messageForm');
+            const chatArea = document.getElementById('chatArea');
+            const textarea = document.getElementById('messageInput');
+            const sendButton = document.getElementById('sendButton');
+            const messageForm = document.getElementById('messageForm');
 
-        if (textarea && sendButton) {
-            textarea.addEventListener('input', function() {
-                sendButton.disabled = !this.value.trim() || this.disabled;
+            // Track whether a request is in-flight to prevent duplicate submissions
+            let isSubmitting = false;
+
+            // Scroll chat to the bottom
+            function scrollToBottom() {
+                if (chatArea) chatArea.scrollTop = chatArea.scrollHeight;
+            }
+
+            // Escape HTML to safely insert user-supplied text into the DOM
+            function escapeHtml(str) {
+                return str
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            // Remove the empty-state placeholder if present
+            function removeEmptyState() {
+                const empty = document.getElementById('emptyState');
+                if (empty) empty.remove();
+            }
+
+            // Append the user bubble immediately
+            function appendUserMessage(text) {
+                removeEmptyState();
+                const el = document.createElement('div');
+                el.className = 'message user';
+                el.innerHTML =
+                    '<div class="message-label">You</div>' +
+                    '<div class="message-content">' + escapeHtml(text).replace(/\n/g, '<br>') + '</div>';
+                chatArea.appendChild(el);
+                scrollToBottom();
+            }
+
+            // Append the assistant bubble with a typing indicator; return its content element.
+            // Uses a direct reference — never a hardcoded ID — so multiple messages work safely.
+            function appendAssistantBubble() {
+                const bubble = document.createElement('div');
+                bubble.className = 'message assistant';
+
+                const label = document.createElement('div');
+                label.className = 'message-label';
+                label.textContent = 'Assistant';
+
+                const contentEl = document.createElement('div');
+                contentEl.className = 'message-content';
+
+                const indicator = document.createElement('div');
+                indicator.className = 'typing-indicator';
+                indicator.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>Assistant is typing\u2026';
+
+                contentEl.appendChild(indicator);
+                bubble.appendChild(label);
+                bubble.appendChild(contentEl);
+                chatArea.appendChild(bubble);
+                scrollToBottom();
+                return contentEl;
+            }
+
+            // Update the send button enabled state
+            function updateSendButton() {
+                sendButton.disabled = isSubmitting || !textarea.value.trim();
+            }
+
+            textarea.addEventListener('input', updateSendButton);
+
+            // Submit on Enter (but allow Shift+Enter for newlines)
+            textarea.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && !e.shiftKey && !isSubmitting) {
+                    e.preventDefault();
+                    if (textarea.value.trim()) {
+                        sendButton.click();
+                    }
+                }
             });
 
-            // Intercept submit to support streaming for simple chats (no document)
-           messageForm.addEventListener('submit', async function(e) {
+            // Main submit handler
+            messageForm.addEventListener('submit', async function (e) {
+                const submitter = e.submitter;
 
-    const submitter = e.submitter;
+                // Let the Clear History button do a normal form POST
+                if (submitter && submitter.name === 'clear_chat') {
+                    return;
+                }
 
-    // Allow Clear History button to submit normally
-    if (submitter && submitter.name === 'clear_chat') {
-        return;
-    }
+                e.preventDefault();
 
-    e.preventDefault();
+                // Guard against concurrent submissions
+                if (isSubmitting) return;
+                const messageText = textarea.value.trim();
+                if (!messageText) return;
 
-    const formData = new FormData(messageForm);
-                const noDoc = formData.get('no_document');
-
-                // UI: show user's message immediately
-                const userMsg = document.createElement('div');
-                userMsg.className = 'message user';
-                userMsg.innerHTML = `<div class="message-label">You</div><div class="message-content">${(formData.get('message')||'').replace(/\n/g,'<br/>')}</div>`;
-                chatArea.appendChild(userMsg);
-
-                // Create assistant container with a unique stream id so multiple
-                // concurrent/serial messages don't overwrite the first container.
-                const assistantBox = document.createElement('div');
-                assistantBox.className = 'message assistant';
-                const streamId = 'streamContent-' + Date.now() + '-' + Math.floor(Math.random()*100000);
-                assistantBox.innerHTML = `<div class="message-label">Assistant</div><div class="message-content" id="${streamId}"></div>`;
-                chatArea.appendChild(assistantBox);
-                chatArea.scrollTop = chatArea.scrollHeight;
-
+                isSubmitting = true;
                 sendButton.disabled = true;
-                sendButton.textContent = 'Sending...';
+                sendButton.textContent = 'Sending…';
+                textarea.disabled = true;
+
+                // Capture form data before clearing the input
+                const formData = new FormData(messageForm);
+
+                // Clear the input immediately so the user sees it's been sent
+                textarea.value = '';
+
+                // Show user message in the chat
+                appendUserMessage(messageText);
+
+                // Show assistant bubble with typing indicator
+                const contentEl = appendAssistantBubble();
+                let firstChunk = true;
 
                 try {
                     const resp = await fetch('{% url "stream_chat" %}', {
@@ -739,130 +795,137 @@
                     });
 
                     if (!resp.ok) {
-                        const text = await resp.text();
-                        document.getElementById('streamContent').innerText = 'Error: ' + text;
-                        return;
-                    }
+                        const errText = await resp.text();
+                        contentEl.textContent = 'Error: ' + errText;
+                    } else {
+                        const reader = resp.body.getReader();
+                        const decoder = new TextDecoder();
 
-                    // Stream the response body
-                    const reader = resp.body.getReader();
-                    const decoder = new TextDecoder();
-                    let done = false;
-                    while (!done) {
-                        const { value, done: readerDone } = await reader.read();
-                        done = readerDone;
-                        if (value) {
-                            const chunk = decoder.decode(value, { stream: true });
-                            const el = document.getElementById(streamId);
-                            if (el) el.innerHTML += chunk.replace(/\n/g,'<br/>');
-                            chatArea.scrollTop = chatArea.scrollHeight;
+                        while (true) {
+                            const { value, done } = await reader.read();
+                            if (done) break;
+                            if (value) {
+                                const chunk = decoder.decode(value, { stream: true });
+                                if (firstChunk) {
+                                    // Replace typing indicator with actual streamed content
+                                    contentEl.innerHTML = '';
+                                    firstChunk = false;
+                                }
+                                // Append text nodes + <br> elements via a fragment for performance
+                                const frag = document.createDocumentFragment();
+                                const lines = chunk.split('\n');
+                                lines.forEach(function (line, i) {
+                                    if (line) frag.appendChild(document.createTextNode(line));
+                                    if (i < lines.length - 1) frag.appendChild(document.createElement('br'));
+                                });
+                                contentEl.appendChild(frag);
+                                scrollToBottom();
+                            }
                         }
                     }
 
+                    // If no content was ever streamed, show a fallback
+                    if (firstChunk) {
+                        contentEl.textContent = '(No response received)';
+                    }
+
                 } catch (err) {
-                    document.getElementById('streamContent').innerText = 'Error: ' + err.message;
+                    contentEl.textContent = 'Error: ' + err.message;
                 } finally {
-                    sendButton.disabled = false;
+                    isSubmitting = false;
                     sendButton.textContent = 'Send';
-                    textarea.value = '';
+                    textarea.disabled = false;
+                    updateSendButton();
+                    textarea.focus();
                 }
             });
-        }
 
-        // Dark mode toggle: persist preference in localStorage
-        (function(){
-            const toggle = document.getElementById('darkToggle');
-            if (!toggle) return;
+            // Initial scroll to bottom (existing history)
+            scrollToBottom();
 
-            const apply = (isDark) => {
-                if (isDark) {
-                    document.body.classList.add('dark');
-                    toggle.textContent = 'Light';
-                    toggle.setAttribute('aria-pressed', 'true');
-                } else {
-                    document.body.classList.remove('dark');
-                    toggle.textContent = 'Dark';
-                    toggle.setAttribute('aria-pressed', 'false');
+            // ===== Dark mode toggle =====
+            (function () {
+                const toggle = document.getElementById('darkToggle');
+                if (!toggle) return;
+
+                const apply = function (isDark) {
+                    if (isDark) {
+                        document.body.classList.add('dark');
+                        toggle.textContent = 'Light';
+                        toggle.setAttribute('aria-pressed', 'true');
+                    } else {
+                        document.body.classList.remove('dark');
+                        toggle.textContent = 'Dark';
+                        toggle.setAttribute('aria-pressed', 'false');
+                    }
+                };
+
+                const stored = localStorage.getItem('darkMode');
+                const isDark = stored === '1' || (stored === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                apply(isDark);
+
+                toggle.addEventListener('click', function () {
+                    const nowDark = !document.body.classList.contains('dark');
+                    apply(nowDark);
+                    try { localStorage.setItem('darkMode', nowDark ? '1' : '0'); } catch (e) { }
+                });
+            })();
+
+            // ===== Sidebar splitter =====
+            (function () {
+                const splitter = document.getElementById('splitter');
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                if (!splitter || !sidebar || !mainContent) return;
+
+                const MIN_WIDTH = 220;
+                const MAX_WIDTH = 600;
+
+                const stored = parseInt(localStorage.getItem('sidebarWidth'), 10);
+                if (!isNaN(stored)) {
+                    sidebar.style.width = Math.min(Math.max(stored, MIN_WIDTH), MAX_WIDTH) + 'px';
                 }
-            };
 
-            // Initialize from localStorage
-            const stored = localStorage.getItem('darkMode');
-            const isDark = stored === '1' || (stored === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            apply(isDark);
+                let dragging = false;
 
-            toggle.addEventListener('click', function(){
-                const nowDark = !document.body.classList.contains('dark');
-                apply(nowDark);
-                try { localStorage.setItem('darkMode', nowDark ? '1' : '0'); } catch(e){}
-            });
-        })();
+                const startDrag = function () {
+                    dragging = true;
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                };
 
-        // Splitter: allow resizing sidebar and chat area horizontally
-        (function(){
-            const splitter = document.getElementById('splitter');
-            const sidebar = document.querySelector('.sidebar');
-            const mainContent = document.querySelector('.main-content');
-            if (!splitter || !sidebar || !mainContent) return;
+                const doDrag = function (clientX) {
+                    if (!dragging) return;
+                    const rect = mainContent.getBoundingClientRect();
+                    const newWidth = Math.min(Math.max(clientX - rect.left, MIN_WIDTH), MAX_WIDTH);
+                    sidebar.style.width = newWidth + 'px';
+                };
 
-            const minWidth = 220; // px
-            const maxWidth = 600; // px
+                const stopDrag = function () {
+                    if (!dragging) return;
+                    dragging = false;
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    try { localStorage.setItem('sidebarWidth', parseInt(sidebar.style.width, 10)); } catch (e) { }
+                };
 
-            // Apply stored width if present
-            const stored = parseInt(localStorage.getItem('sidebarWidth'), 10);
-            if (!isNaN(stored)) {
-                sidebar.style.width = Math.min(Math.max(stored, minWidth), maxWidth) + 'px';
-            }
+                splitter.addEventListener('mousedown', function (e) {
+                    e.preventDefault();
+                    startDrag();
+                });
+                window.addEventListener('mousemove', function (e) { doDrag(e.clientX); });
+                window.addEventListener('mouseup', stopDrag);
 
-            let dragging = false;
+                splitter.addEventListener('touchstart', function (e) {
+                    startDrag();
+                }, { passive: false });
+                window.addEventListener('touchmove', function (e) {
+                    if (!dragging) return;
+                    doDrag(e.touches[0].clientX);
+                }, { passive: false });
+                window.addEventListener('touchend', stopDrag);
+            })();
 
-            const startDrag = (clientX) => {
-                dragging = true;
-                document.body.style.cursor = 'col-resize';
-                document.body.style.userSelect = 'none';
-            };
-
-            const doDrag = (clientX) => {
-                if (!dragging) return;
-                const rect = mainContent.getBoundingClientRect();
-                let newWidth = clientX - rect.left; // sidebar left is mainContent left
-                newWidth = Math.min(Math.max(newWidth, minWidth), maxWidth);
-                sidebar.style.width = newWidth + 'px';
-            };
-
-            const stopDrag = () => {
-                if (!dragging) return;
-                dragging = false;
-                document.body.style.cursor = '';
-                document.body.style.userSelect = '';
-                try { localStorage.setItem('sidebarWidth', parseInt(sidebar.style.width, 10)); } catch(e){}
-            };
-
-            splitter.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                startDrag(e.clientX);
-            });
-
-            window.addEventListener('mousemove', (e) => {
-                if (!dragging) return;
-                doDrag(e.clientX);
-            });
-
-            window.addEventListener('mouseup', (e) => {
-                stopDrag();
-            });
-
-            // Touch support
-            splitter.addEventListener('touchstart', (e) => {
-                startDrag(e.touches[0].clientX);
-            }, {passive:false});
-
-            window.addEventListener('touchmove', (e) => {
-                if (!dragging) return;
-                doDrag(e.touches[0].clientX);
-            }, {passive:false});
-
-            window.addEventListener('touchend', stopDrag);
         })();
     </script>
 </body>

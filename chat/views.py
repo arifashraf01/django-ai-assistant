@@ -1,247 +1,208 @@
 from django.shortcuts import render, redirect
 from django.contrib import messages
-from .models import ChatMessage, Document
-from .forms import DocumentForm
-from .pdf_utils import extract_text_from_pdf, chunk_text
-from .rag_utils import store_document_chunks, get_rag_response, get_llm_response, delete_document_collection
-from .rag_utils import stream_llm_response
+from django.conf import settings
 from django.http import StreamingHttpResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
 
+from .models import ChatMessage, Document
+from .forms import DocumentForm
+from .pdf_utils import extract_text_from_pdf, chunk_text
+from .rag_utils import (
+    store_document_chunks,
+    get_rag_response,
+    stream_llm_response,
+    delete_document_collection,
+)
 
-def chatbot(request):
-    """
-    Main chatbot view handling:
-    - PDF upload and processing
-    - RAG-based chat with context from uploaded PDFs
-    - Chat history management
-    """
-    
-    response_text = ""
-    active_document = None
+# Maximum number of message pairs to retain per session
+_MAX_HISTORY = 15
 
-    # Ensure the session exists so we can scope chat history
+
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
+
+def _get_or_create_session(request) -> str:
+    """Ensure a session exists and return its key."""
     if not request.session.session_key:
         request.session.create()
-    session_key = request.session.session_key
+    return request.session.session_key
 
-    # Clear chat history for this session
-    if request.method == "POST" and "clear_chat" in request.POST:
 
-         # Delete chat history
-        ChatMessage.objects.filter(session_key=session_key).delete()
+def _build_conversation_history(session_key: str, max_pairs: int = _MAX_HISTORY) -> list:
+    """Return a flat list of {role, content} dicts for the most recent *max_pairs* exchanges."""
+    qs = (
+        ChatMessage.objects
+        .filter(session_key=session_key)
+        .order_by("-created_at")
+        .only("user_message", "ai_response")[:max_pairs]
+    )
+    history: list[dict] = []
+    for cm in reversed(list(qs)):
+        history.append({"role": "user", "content": cm.user_message})
+        history.append({"role": "assistant", "content": cm.ai_response})
+    return history
 
-         # Remove active document
-        documents = Document.objects.filter(is_processed=True)
 
-        for doc in documents:
-           try:
-            delete_document_collection(doc.id)
-           except Exception:
-            pass
+def _trim_history(session_key: str, max_pairs: int = _MAX_HISTORY) -> None:
+    """Delete the oldest messages beyond *max_pairs* for this session in one query."""
+    keep_ids = list(
+        ChatMessage.objects
+        .filter(session_key=session_key)
+        .order_by("-created_at")
+        .values_list("id", flat=True)[:max_pairs]
+    )
+    ChatMessage.objects.filter(session_key=session_key).exclude(id__in=keep_ids).delete()
 
-        documents.delete()
 
-        # Clear session
-        request.session.flush()
+# ---------------------------------------------------------------------------
+# Views
+# ---------------------------------------------------------------------------
 
-        messages.success(request, "Chat history and active document cleared.")
+def chatbot(request):
+    """Handle PDF upload, document management, and page rendering.
 
-        return redirect("chatbot")
+    Chat messages are sent exclusively via the ``stream_chat`` AJAX endpoint;
+    this view only serves the page shell and handles form actions.
+    """
+    session_key = _get_or_create_session(request)
 
-    # Remove active document (mark as not processed and delete chroma collection)
-    if request.method == "POST" and "remove_document" in request.POST:
-        documents = Document.objects.filter(is_processed=True).order_by("-uploaded_at")
-        if documents.exists():
-            doc = documents.first()
-            try:
-                # mark as not processed so it no longer acts as active
-                doc.is_processed = False
-                doc.save()
-                # remove its chromadb collection
-                delete_document_collection(doc.id)
-                messages.success(request, "Active document removed.")
-            except Exception as e:
-                messages.error(request, f"Error removing document: {e}")
-        return redirect("chatbot")
+    if request.method == "POST":
+        # ---- Clear all history and documents ----
+        if "clear_chat" in request.POST:
+            ChatMessage.objects.filter(session_key=session_key).delete()
+            for doc in Document.objects.filter(is_processed=True):
+                try:
+                    delete_document_collection(doc.id)
+                except Exception:
+                    pass
+            Document.objects.filter(is_processed=True).delete()
+            request.session.flush()
+            messages.success(request, "Chat history and active document cleared.")
+            return redirect("chatbot")
 
-    # PDF Upload and Processing
-    if request.method == "POST" and request.FILES.get("file"):
-        document_form = DocumentForm(request.POST, request.FILES)
+        # ---- Remove the active document ----
+        if "remove_document" in request.POST:
+            doc = Document.objects.filter(is_processed=True).order_by("-uploaded_at").first()
+            if doc:
+                try:
+                    doc.is_processed = False
+                    doc.save()
+                    delete_document_collection(doc.id)
+                    messages.success(request, "Active document removed.")
+                except Exception as exc:
+                    messages.error(request, f"Error removing document: {exc}")
+            return redirect("chatbot")
 
-        if document_form.is_valid():
-            # Save document to database
-            document = document_form.save()
-            
-            try:
-                # Extract text from PDF
-                pdf_path = document.file.path
-                text = extract_text_from_pdf(pdf_path)
-                
-                # Chunk the text
-                chunks = chunk_text(text, chunk_size=500)
-                
-                # Store chunks with embeddings in ChromaDB
-                chunk_count = store_document_chunks(document.id, chunks)
-                document.is_processed = True
-                document.save()
-                
-                messages.success(
-                    request,
-                    f"Document uploaded! ({chunk_count} chunks indexed)"
-                )
-            
-            except Exception as e:
-                messages.error(request, f"Error processing PDF: {str(e)}")
-                document.delete()
+        # ---- PDF upload ----
+        if request.FILES.get("file"):
+            form = DocumentForm(request.POST, request.FILES)
+            if form.is_valid():
+                document = form.save()
+                try:
+                    text = extract_text_from_pdf(document.file.path)
+                    if not text.strip():
+                        raise ValueError("No readable text found in this PDF.")
+                    chunks = chunk_text(text, chunk_size=500)
+                    chunk_count = store_document_chunks(document.id, chunks)
+                    document.is_processed = True
+                    document.save()
+                    messages.success(request, f"Document uploaded! ({chunk_count} chunks indexed)")
+                except Exception as exc:
+                    messages.error(request, f"Error processing PDF: {exc}")
+                    document.delete()
+            return redirect("chatbot")
 
-        return redirect("chatbot")
-
-    # Chat Message handling: support sending without document and with RAG when a document exists
-    if request.method == "POST" and request.POST.get("message"):
-        user_message = request.POST.get("message")
-
-        # Check if user requested to bypass document
-        bypass = True if request.POST.get("no_document") in ["on", "true", "1"] else False
-
-        # Build conversation history from this session (last 15 pairs)
-        history_qs = ChatMessage.objects.filter(session_key=session_key).order_by("-created_at")[:15]
-        conversation_history = []
-        for cm in reversed(list(history_qs)):
-            conversation_history.append({"role": "user", "content": cm.user_message})
-            conversation_history.append({"role": "assistant", "content": cm.ai_response})
-
-        # Get the most recent processed document
-        documents = Document.objects.filter(is_processed=True).order_by("-uploaded_at")
-
-        if documents.exists() and not bypass:
-            active_document = documents.first()
-            # RAG Flow: pass conversation history + document context
-            response_text = get_rag_response(
-                active_document.id,
-                user_message,
-                conversation_history=conversation_history if conversation_history else None,
-            )
-        else:
-            # No active document or user chose to bypass -> direct agent response
-            # For simple chat without a document, only send a small recent history
-            # to the LLM (e.g., last 2 pairs) to keep prompts small and responses fast.
-            if conversation_history:
-                # conversation_history is ordered oldest->newest; take last 4 entries
-                short_history = conversation_history[-4:]
-            else:
-                short_history = None
-
-            from django.conf import settings as djsettings
-            response_text = get_llm_response(
-                user_message,
-                conversation_history=short_history,
-                model_name=getattr(djsettings, "FAST_OLLAMA_MODEL", None),
-            )
-            # when bypassing or no doc present, don't associate message with a document
-            active_document = None
-
-        # Save chat message scoped to this session
-        ChatMessage.objects.create(
-            user_message=user_message,
-            ai_response=response_text,
-            document=active_document,
-            session_key=session_key,
-        )
-
-        # Trim history to last 15 pairs for this session
-        total = ChatMessage.objects.filter(session_key=session_key).count()
-        if total > 15:
-            extra = total - 15
-            old_qs = ChatMessage.objects.filter(session_key=session_key).order_by("created_at")[:extra]
-            # bulk delete
-            ids_to_delete = [o.id for o in old_qs]
-            ChatMessage.objects.filter(id__in=ids_to_delete).delete()
-
-    # Fetch only session-scoped chat messages
-    chat_messages = ChatMessage.objects.filter(session_key=session_key).order_by("-created_at")
-    
-    # Get the most recent processed document for context
-    documents = Document.objects.filter(is_processed=True).order_by("-uploaded_at")
-    active_document = documents.first() if documents.exists() else None
+    # ---- GET: render page ----
+    chat_messages = (
+        ChatMessage.objects
+        .filter(session_key=session_key)
+        .order_by("-created_at")
+        .only("user_message", "ai_response", "created_at")
+    )
+    active_document = Document.objects.filter(is_processed=True).order_by("-uploaded_at").first()
 
     return render(
         request,
         "chat/chat.html",
         {
-            "response": response_text,
             "chat_messages": chat_messages,
             "document_form": DocumentForm(),
             "active_document": active_document,
-            "documents": documents,
-        }
+        },
     )
 
 
 @csrf_exempt
 def stream_chat(request):
-    """Stream chat responses for simple (no-PDF) conversations.
+    """AJAX endpoint: stream the LLM reply for a user message.
 
-    Accepts POST with 'message' and optional 'no_document'. Streams text chunks
-    (plain text) as they arrive from the model. If a document is active and
-    not bypassed, falls back to synchronous RAG response (single chunk).
+    POST params:
+        message      – the user's text (required)
+        no_document  – "on" / "true" / "1" to bypass the active document
+
+    Behaviour:
+        - Active document present and *not* bypassed → RAG response (single chunk).
+        - No document or bypassed → streaming LLM response (chunked).
     """
     if request.method != "POST":
         return HttpResponseBadRequest("POST required")
 
-    user_message = request.POST.get("message")
+    user_message = (request.POST.get("message") or "").strip()
     if not user_message:
         return HttpResponseBadRequest("Missing message")
 
-    bypass = True if request.POST.get("no_document") in ["on", "true", "1"] else False
+    bypass = request.POST.get("no_document") in ("on", "true", "1")
+    session_key = _get_or_create_session(request)
 
-    # session
-    if not request.session.session_key:
-        request.session.create()
-    session_key = request.session.session_key
+    active_document = Document.objects.filter(is_processed=True).order_by("-uploaded_at").first()
 
-    # Build short history for speed
-    history_qs = ChatMessage.objects.filter(session_key=session_key).order_by("-created_at")[:15]
-    conversation_history = []
-    for cm in reversed(list(history_qs)):
-        conversation_history.append({"role": "user", "content": cm.user_message})
-        conversation_history.append({"role": "assistant", "content": cm.ai_response})
+    # ---- RAG path ----
+    if active_document and not bypass:
+        history = _build_conversation_history(session_key)
+        try:
+            resp_text = get_rag_response(
+                active_document.id,
+                user_message,
+                conversation_history=history or None,
+            )
+        except Exception as exc:
+            resp_text = f"Error generating response: {exc}"
 
-    # Check for active document
-    documents = Document.objects.filter(is_processed=True).order_by("-uploaded_at")
-    if documents.exists() and not bypass:
-        # For RAG we don't stream here; return a single response and let client handle it
-        active_document = documents.first()
-        resp_text = get_rag_response(active_document.id, user_message, conversation_history=conversation_history if conversation_history else None)
+        ChatMessage.objects.create(
+            user_message=user_message,
+            ai_response=resp_text,
+            document=active_document,
+            session_key=session_key,
+        )
+        _trim_history(session_key)
+        return StreamingHttpResponse((resp_text,), content_type="text/plain")
 
-        # Save message and return as single chunk
-        ChatMessage.objects.create(user_message=user_message, ai_response=resp_text, document=active_document, session_key=session_key)
-
-        return StreamingHttpResponse((resp_text,), content_type='text/plain')
-
-    # No document: stream from LLM using FAST_OLLAMA_MODEL
-    from django.conf import settings as djsettings
-    model_name = getattr(djsettings, 'FAST_OLLAMA_MODEL', None)
+    # ---- Simple streaming LLM path ----
+    # Use only the last 2 pairs (4 messages) to keep prompts small and fast
+    history = _build_conversation_history(session_key, max_pairs=2)
+    model_name = getattr(settings, "FAST_OLLAMA_MODEL", None)
 
     def stream_generator():
-        buffer = []
+        buffer: list[str] = []
         try:
-            for piece in stream_llm_response(user_message, conversation_history=conversation_history if conversation_history else None, model_name=model_name):
-                text = piece if isinstance(piece, str) else str(piece)
-                buffer.append(text)
-                yield text
+            for piece in stream_llm_response(user_message, conversation_history=history or None, model_name=model_name):
+                buffer.append(piece)
+                yield piece
         except GeneratorExit:
             return
         finally:
-            # After streaming completes, persist the final assistant response
-            try:
-                final_text = ''.join(buffer).strip()
-                if final_text:
-                    ChatMessage.objects.create(user_message=user_message, ai_response=final_text, document=None, session_key=session_key)
-            except Exception:
-                pass
+            final_text = "".join(buffer).strip()
+            if final_text:
+                try:
+                    ChatMessage.objects.create(
+                        user_message=user_message,
+                        ai_response=final_text,
+                        document=None,
+                        session_key=session_key,
+                    )
+                    _trim_history(session_key)
+                except Exception:
+                    pass
 
-    # Save a placeholder chat message will be updated after completion (optional)
-    # We'll append final response after streaming completes on client side
-
-    return StreamingHttpResponse(stream_generator(), content_type='text/plain')
+    return StreamingHttpResponse(stream_generator(), content_type="text/plain")
